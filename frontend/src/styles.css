@@ -1,0 +1,73 @@
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #192332;
+  background: #f2f5f8;
+  font-synthesis: none;
+  --border: #dbe3ec;
+  --muted: #506079;
+  --accent: #154e9b;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+button, select { font: inherit; }
+button {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: .65rem 1rem;
+  background: #1b51a0;
+  color: white;
+  font-weight: 650;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { filter: brightness(.9); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.secondary { background: white; color: var(--accent); border-color: var(--border); }
+:focus-visible { outline: 3px solid #488bea; outline-offset: 3px; }
+.masthead { background: #12233b; border-bottom: 3px solid #2c72c6; }
+.masthead-inner, main { max-width: 1280px; padding-inline: 36px; margin: auto; }
+.masthead-inner { display: flex; align-items: center; height: 64px; }
+.brand { color: #fff; font-size: 1.1rem; font-weight: 750; text-decoration: none; }
+main { padding-block: 32px 56px; }
+.page-heading, .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.page-heading { margin-bottom: 26px; }
+.page-heading h1 { margin: .25rem 0; font-size: 2.25rem; letter-spacing: -.04em; }
+.page-heading p { margin: .5rem 0 0; color: var(--muted); }
+.panel { border: 1px solid var(--border); border-radius: 10px; background: white; padding: 20px 24px; margin-bottom: 18px; }
+.panel-heading { margin: 0 0 14px; }
+.panel-heading > div { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+h2 { margin: 0; font-size: 1.1rem; }
+.metrics, .severity-totals { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.metrics > div { background: #f4f7fb; border-radius: 8px; padding: 16px; }
+.metrics dt { min-height: 26px; font-size: .85rem; font-weight: 650; color: var(--muted); }
+.metrics dd { margin: 8px 0 0; font-size: 1.7rem; font-weight: 750; letter-spacing: -.03em; }
+.severity-totals { margin-top: 16px; }
+.severity-totals > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.severity-totals dd { margin: 0; color: var(--muted); font-size: .83rem; }
+.badge { display: inline-block; padding: .27rem .5rem; border-radius: 4px; font-size: .72rem; font-weight: 750; letter-spacing: .035em; background: #e9eef4; color: #3c4c61; white-space: nowrap; }
+.badge-pass, .badge-completed { background: #e3f4ed; color: #176248; }
+.badge-fail, .badge-failed, .badge-critical { background: #fce8e8; color: #982e35; }
+.badge-running { background: #e4effe; color: #164d95; }
+.badge-cannot_scan, .badge-high { background: #fff1de; color: #854719; }
+.muted, .notice { color: var(--muted); }
+.notice { margin: 0 0 14px; padding: 12px 0; }
+.error { color: #852638; background: #fff1f2; border: 1px solid #f0c8cc; padding: 12px; border-radius: 7px; }
+.notice button { margin-left: .75rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+th { font-weight: 650; color: #34445d; background: #f4f7fb; }
+tbody tr:last-child td { border-bottom: 0; }
+small { display: block; color: var(--muted); margin-top: 5px; }
+.identifier { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+.filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.filters label { display: grid; gap: 6px; font-size: .84rem; font-weight: 650; }
+select { width: 100%; color: inherit; background: white; border: 1px solid var(--border); border-radius: 5px; padding: 8px; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; font-size: .84rem; }
+@media (max-width: 680px) {
+  .masthead-inner, main { padding-inline: 16px; }
+  .panel { padding-inline: 14px; }
+  .metrics, .severity-totals, .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  table { min-width: 560px; }
+}

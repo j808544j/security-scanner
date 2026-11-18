@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ACCOUNT_WORKERS: "${ACCOUNT_WORKERS:-4}"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - scanner-data:/var/lib/gauntlet
+  dashboard:
+    build:
+      context: frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:8080"
+
+volumes:
+  scanner-data:
