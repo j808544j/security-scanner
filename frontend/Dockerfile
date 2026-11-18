@@ -1,4 +1,4 @@
-FROM node:22.18.0-alpine AS build
+FROM node:22.18.0-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --no-audit --no-fund
