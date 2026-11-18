@@ -22,7 +22,8 @@ def main():
                .get_by_text("3", exact=True)).to_be_visible()
         latest.get_by_role("link", name="View findings").click()
         expect(page.get_by_role("heading", name="Findings", exact=True)).to_be_visible()
-        expect(page.get_by_text("example-corp-public-downloads", exact=True)).to_be_visible()
+        resource = page.get_by_role("cell", name="example-corp-public-downloads")
+        expect(resource).to_be_visible()
         browser.close()
 
 
