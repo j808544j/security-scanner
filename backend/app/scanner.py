@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .checks import CHECKS
+from .checks import CHECKS, required_string
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +62,13 @@ class Scanner:
                 errors = account.get("errors", {})
                 resources = account.get("resources", {})
                 if isinstance(errors, dict) and check.collection in errors:
-                    error = errors[check.collection]
-                    if not isinstance(error, str):
-                        logger.warning("Malformed collection error for check %s", check.id)
-                        error = "Invalid collection error code."
+                    try:
+                        error = required_string(
+                            errors[check.collection], f"{check.collection} collection error code"
+                        )
+                    except ValueError as exc:
+                        error = str(exc)
+                        logger.warning("Malformed collection error for check %s: %s", check.id, error)
                     results = [check.finding("CANNOT_SCAN", f"Collection read failed: {error}")]
                 elif not isinstance(errors, dict) or not isinstance(resources, dict):
                     logger.warning("Malformed collection maps for check %s", check.id)

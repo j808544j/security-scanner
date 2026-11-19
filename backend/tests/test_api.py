@@ -124,6 +124,65 @@ def test_collection_errors_take_precedence_over_resource_records(tmp_path):
             assert "AccessDenied" in finding["details"]
 
 
+def test_malformed_collection_error_does_not_stop_scan(tmp_path, caplog):
+    snapshot = json.loads(INVENTORY_PATH.read_text())
+    account = snapshot["accounts"][0]
+    account["simulated_latency_ms"] = 0
+    account["errors"]["rds_instances"] = "\ud800"
+    snapshot["accounts"] = [account]
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text(json.dumps(snapshot))
+
+    with TestClient(create_app(inventory, tmp_path / "db")) as client:
+        scan_id = client.post("/api/scans").json()["id"]
+        scan = finish(client, scan_id)
+        assert scan["status"] == "COMPLETED"
+        assert scan["counts"] == {"PASS": 13, "FAIL": 9, "CANNOT_SCAN": 1}
+        findings = client.get(f"/api/scans/{scan_id}/findings").json()["items"]
+        assert len(findings) == 23
+        malformed, = [finding for finding in findings if finding["check_id"] == "AWS-RDS-01"]
+        assert malformed["status"] == "CANNOT_SCAN"
+        assert malformed["resource_id"] is None
+        reason = "rds_instances collection error code must contain valid Unicode text."
+        assert reason in malformed["details"]
+        assert any(
+            record.levelno == logging.WARNING
+            and "AWS-RDS-01" in record.message
+            and reason in record.message
+            for record in caplog.records
+        )
+
+
+def test_malformed_iam_key_id_does_not_stop_scan(tmp_path, caplog):
+    snapshot = json.loads(INVENTORY_PATH.read_text())
+    account = snapshot["accounts"][0]
+    account["simulated_latency_ms"] = 0
+    users = account["resources"]["iam_users"]
+    user = next(user for user in users if user["user_name"] == "reporting-bot")
+    user["access_keys"][0]["key_id"] = "\ud800"
+    snapshot["accounts"] = [account]
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text(json.dumps(snapshot))
+
+    with TestClient(create_app(inventory, tmp_path / "db")) as client:
+        scan_id = client.post("/api/scans").json()["id"]
+        scan = finish(client, scan_id)
+        assert scan["status"] == "COMPLETED"
+        assert scan["counts"] == {"PASS": 14, "FAIL": 9, "CANNOT_SCAN": 1}
+        findings = client.get(f"/api/scans/{scan_id}/findings").json()["items"]
+        assert len(findings) == 24
+        malformed, = [finding for finding in findings if finding["status"] == "CANNOT_SCAN"]
+        assert malformed["check_id"] == "AWS-IAM-02"
+        assert malformed["resource_id"] == "reporting-bot"
+        assert malformed["details"] == "access_keys[0].key_id must contain valid Unicode text."
+        assert any(
+            record.levelno == logging.WARNING
+            and "AWS-IAM-02" in record.message
+            and malformed["details"] in record.message
+            for record in caplog.records
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "resource_id"),
     [("rules[0].name", "nsg-jumpbox"), ("name", None), ("region", "nsg-jumpbox")],

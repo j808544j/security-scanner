@@ -122,9 +122,7 @@ def iam_access_key_age(resource: dict, snapshot_taken_at: str) -> tuple[Status, 
             raise ValueError(f"{field}.status must be Active or Inactive.")
         if status == "Inactive":
             continue
-        key_id = key.get("key_id")
-        if not isinstance(key_id, str) or not key_id:
-            raise ValueError(f"{field}.key_id must be a nonempty string.")
+        key_id = required_string(key.get("key_id"), f"{field}.key_id")
         created_at = parse_timestamp(key.get("created_at"), f"{field}.created_at")
         if taken_at - created_at > max_age:
             overdue.append(key_id)
