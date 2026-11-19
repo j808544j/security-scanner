@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 from typing import Literal
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,64 @@ def s3_public_access_block(resource: dict, _snapshot_taken_at: str) -> tuple[Sta
     return "PASS", "All public access block settings are enabled."
 
 
+def iam_console_mfa(resource: dict, _snapshot_taken_at: str) -> tuple[Status, str]:
+    console_access = resource.get("console_access")
+    if type(console_access) is not bool:
+        raise ValueError("console_access must be a boolean.")
+    if not console_access:
+        return "PASS", "User has no console access."
+    mfa_enabled = resource.get("mfa_enabled")
+    if type(mfa_enabled) is not bool:
+        raise ValueError("mfa_enabled must be a boolean for users with console access.")
+    if not mfa_enabled:
+        return "FAIL", "User has console access but MFA is disabled."
+    return "PASS", "MFA is enabled for console access."
+
+
+def parse_timestamp(value: object, field: str) -> datetime:
+    if isinstance(value, str):
+        try:
+            timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+        else:
+            if timestamp.tzinfo is not None:
+                return timestamp
+    raise ValueError(f"{field} must be an ISO 8601 timestamp with a time zone.")
+
+
+def iam_access_key_age(resource: dict, snapshot_taken_at: str) -> tuple[Status, str]:
+    keys = resource.get("access_keys")
+    if not isinstance(keys, list):
+        raise ValueError("access_keys must be a list.")
+    taken_at = parse_timestamp(snapshot_taken_at, "snapshot_taken_at")
+    max_age = timedelta(days=90)
+    overdue = []
+    for index, key in enumerate(keys):
+        field = f"access_keys[{index}]"
+        if not isinstance(key, dict):
+            raise ValueError(f"{field} must be an object.")
+        status = key.get("status")
+        if status not in ("Active", "Inactive"):
+            raise ValueError(f"{field}.status must be Active or Inactive.")
+        if status == "Inactive":
+            continue
+        key_id = key.get("key_id")
+        if not isinstance(key_id, str) or not key_id:
+            raise ValueError(f"{field}.key_id must be a nonempty string.")
+        created_at = parse_timestamp(key.get("created_at"), f"{field}.created_at")
+        if taken_at - created_at > max_age:
+            overdue.append(key_id)
+    if overdue:
+        return "FAIL", f"Active access keys older than 90 days: {', '.join(overdue)}."
+    return "PASS", "No active access keys are older than 90 days."
+
+
 AWS_S3_01 = Check("AWS-S3-01", "S3 bucket blocks public access", "HIGH", "aws", "s3_buckets",
                   "name", s3_public_access_block)
+AWS_IAM_01 = Check("AWS-IAM-01", "Console users have MFA", "HIGH", "aws", "iam_users",
+                   "user_name", iam_console_mfa)
+AWS_IAM_02 = Check("AWS-IAM-02", "No active access key is older than 90 days", "MEDIUM", "aws",
+                   "iam_users", "user_name", iam_access_key_age)
 
-CHECKS = (AWS_S3_01,)
+CHECKS = (AWS_S3_01, AWS_IAM_01, AWS_IAM_02)
