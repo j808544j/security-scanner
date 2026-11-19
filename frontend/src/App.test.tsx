@@ -55,11 +55,12 @@ test("Run scan shows RUNNING and polls until the result appears", async () => {
 
 test("findings obey filters and display snapshot strings as text", async () => {
   window.history.replaceState(null, "", "/#/scans/scan-1");
-  const details = "<img src=x onerror=alert('untrusted-input')>";
+  const details = "<img src=x onerror=alert('untrusted-input')> temporary rule for vendor support";
   const finding = {
-    id: 1, scan_id: "scan-1", check_id: "AWS-S3-01", title: "S3 bucket blocks public access",
-    provider: "aws", account_id: "aws-account", region: null, resource_id: "bucket",
-    status: "FAIL", severity: "HIGH", details,
+    id: 1, scan_id: "scan-1", check_id: "GCP-VPC-01",
+    title: "Firewall rule doesn't expose SSH or RDP to the internet",
+    provider: "gcp", account_id: "example-corp-gcp", region: "global",
+    resource_id: "allow-rdp-anywhere", status: "FAIL", severity: "CRITICAL", details,
   };
   vi.stubGlobal("fetch", async (path: string) => {
     const url = new URL(path, window.location.origin);
