@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from collections import Counter
 from pathlib import Path
@@ -121,6 +122,47 @@ def test_collection_errors_take_precedence_over_resource_records(tmp_path):
             assert finding["status"] == "CANNOT_SCAN"
             assert finding["resource_id"] is None
             assert "AccessDenied" in finding["details"]
+
+
+@pytest.mark.parametrize(
+    ("field", "resource_id"),
+    [("rules[0].name", "nsg-jumpbox"), ("name", None), ("region", "nsg-jumpbox")],
+)
+def test_malformed_nsg_text_does_not_stop_scan(tmp_path, caplog, field, resource_id):
+    snapshot = json.loads(INVENTORY_PATH.read_text())
+    account = next(account for account in snapshot["accounts"] if account["provider"] == "azure")
+    account["simulated_latency_ms"] = 0
+    groups = account["resources"]["network_security_groups"]
+    jumpbox = next(group for group in groups if group["name"] == "nsg-jumpbox")
+    if field == "rules[0].name":
+        jumpbox["rules"][0]["name"] = "\ud800"
+    else:
+        jumpbox[field] = "\ud800"
+    snapshot["accounts"] = [account]
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text(json.dumps(snapshot))
+
+    with TestClient(create_app(inventory, tmp_path / "db")) as client:
+        response = client.post("/api/scans")
+        assert response.status_code == 202
+        scan_id = response.json()["id"]
+        scan = finish(client, scan_id)
+        assert scan["status"] == "COMPLETED"
+        assert scan["counts"] == {"PASS": 4, "FAIL": 2, "CANNOT_SCAN": 1}
+        findings = client.get(f"/api/scans/{scan_id}/findings").json()["items"]
+        assert len(findings) == 7
+        malformed, = [finding for finding in findings if finding["status"] == "CANNOT_SCAN"]
+        assert malformed["check_id"] == "AZ-NSG-01"
+        assert malformed["resource_id"] == resource_id
+        assert malformed["details"] == f"{field} must contain valid Unicode text."
+        if field == "region":
+            assert malformed["region"] is None
+        assert any(
+            record.levelno == logging.WARNING
+            and "AZ-NSG-01" in record.message
+            and malformed["details"] in record.message
+            for record in caplog.records
+        )
 
 
 def test_unreadable_snapshot_is_a_failed_scan(tmp_path):

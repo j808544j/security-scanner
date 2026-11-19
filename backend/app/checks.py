@@ -1,4 +1,5 @@
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -41,14 +42,12 @@ class Check:
         try:
             if not isinstance(resource, dict):
                 raise ValueError("Resource must be an object.")
-            identifier = resource.get(self.resource_key)
-            if not isinstance(identifier, str) or not identifier:
-                raise ValueError(f"{self.resource_key} must be a nonempty string.")
-            resource_id = identifier
+            resource_id = required_string(resource.get(self.resource_key), self.resource_key)
             region_value = resource.get("region")
-            if region_value is not None and not isinstance(region_value, str):
-                raise ValueError("region must be a string when supplied.")
-            region = region_value
+            if region_value is not None:
+                if not isinstance(region_value, str):
+                    raise ValueError("region must be a string when supplied.")
+                region = valid_unicode(region_value, "region")
             status, details = self.rule(resource, snapshot_taken_at)
         except ValueError as error:
             status, details = "CANNOT_SCAN", str(error)
@@ -146,7 +145,26 @@ def objects(value: object, field: str) -> list[dict]:
 def required_string(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a nonempty string.")
+    return valid_unicode(value, field)
+
+
+def valid_unicode(value: str, field: str) -> str:
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError(f"{field} must contain valid Unicode text.") from None
     return value
+
+
+def ip_protocol(value: object, field: str, names: tuple[str, ...]) -> str:
+    protocol = required_string(value, field).lower()
+    if protocol in names:
+        return protocol
+    if protocol.isascii() and protocol.isdecimal() and len(protocol) <= 3:
+        number = int(protocol)
+        if number <= 255:
+            return str(number)
+    raise ValueError(f"{field} must be a supported protocol name or an IP protocol number.")
 
 
 def public_cidrs(value: object, field: str) -> list[str]:
@@ -184,7 +202,9 @@ def ec2_admin_ingress(resource: dict, _snapshot_taken_at: str) -> tuple[Status, 
     exposures = []
     for index, rule in enumerate(objects(resource.get("ingress"), "ingress")):
         field = f"ingress[{index}]"
-        protocol = required_string(rule.get("protocol"), f"{field}.protocol").lower()
+        protocol = ip_protocol(
+            rule.get("protocol"), f"{field}.protocol", ("-1", "tcp", "udp", "icmp", "icmpv6"),
+        )
         sources = public_cidrs(rule.get("cidrs"), f"{field}.cidrs")
         if protocol == "-1":
             ports = set(ADMIN_PORTS)
@@ -226,11 +246,17 @@ def nsg_admin_ingress(resource: dict, _snapshot_taken_at: str) -> tuple[Status, 
             raise ValueError(f"{field}.protocol is not a supported NSG protocol.")
         name = required_string(rule.get("name"), f"{field}.name")
         source = required_string(rule.get("source"), f"{field}.source")
+        if source.lower() in ("internet", "*"):
+            sources = [source]
+        elif re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*", source):
+            sources = []
+        else:
+            sources = public_cidrs([source], f"{field}.source")
         destination = rule.get("destination_ports")
         ports = (set(ADMIN_PORTS) if destination == "*"
                  else admin_ports_from_text(destination, f"{field}.destination_ports"))
-        if source.lower() in ("internet", "*", "0.0.0.0/0", "::/0") and ports:
-            exposures.append(exposure(name, [source], ports))
+        if sources and ports:
+            exposures.append(exposure(name, sources, ports))
     return exposure_result(exposures)
 
 
@@ -248,7 +274,10 @@ def vpc_admin_ingress(resource: dict, _snapshot_taken_at: str) -> tuple[Status, 
     ports = set()
     for index, rule in enumerate(objects(resource.get("allowed"), "allowed")):
         field = f"allowed[{index}]"
-        protocol = required_string(rule.get("IPProtocol"), f"{field}.IPProtocol").lower()
+        protocol = ip_protocol(
+            rule.get("IPProtocol"), f"{field}.IPProtocol",
+            ("all", "tcp", "udp", "icmp", "esp", "ah", "ipip", "sctp"),
+        )
         if protocol == "all" or (protocol in ("tcp", "6") and "ports" not in rule):
             ports.update(ADMIN_PORTS)
         elif protocol in ("tcp", "6"):

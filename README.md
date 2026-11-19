@@ -43,14 +43,14 @@ python -m playwright install chromium
 python .github/smoke_scan.py
 ```
 
-The **Scan slice** workflow runs on pushes and pull requests. The submission ref's workflow page lists the passing run for the commit reviewed here. [Final submission CI](https://github.com/j808544j/security-scanner/actions/workflows/ci.yml?query=branch%3Aassignment-submission)
+The **Scan slice** workflow runs on pushes and pull requests. [Branch workflow history for assignment-submission](https://github.com/j808544j/security-scanner/actions/workflows/ci.yml?query=branch%3Aassignment-submission)
 
 ## Architecture and assumptions
 
 - The API reads the inventory snapshot at the start of each request to create a scan. `INVENTORY_PATH` defaults to the bundled appendix. Omitting `account_ids` scans every account. Selection uses the snapshot's account IDs exactly and deduplicates repeated IDs. If the snapshot is unreadable, a full scan is recorded as FAILED and a request with explicit account IDs returns HTTP 503 because the IDs cannot be validated.
 - S3 passes when all four public access block flags are boolean `true`. An explicit `null` means public access block is unconfigured and fails. A missing block field or missing or malformed flag produces CANNOT_SCAN. Collection read errors take precedence over resource records. Accounts with zero evaluated findings show **N/A**.
 - The IAM MFA check requires MFA for users with console access. For evaluable records, the key age check uses `snapshot_taken_at` and fails when any active key is older than 90 days. A malformed field required by an IAM check produces CANNOT_SCAN for that user. An unreadable `iam_users` collection produces one CANNOT_SCAN finding for each IAM check.
-- The network checks evaluate individual rules for internet-wide TCP exposure on ports 22 and 3389. They use the source and port fields present in the snapshot. Azure Deny and Outbound rules and GCP disabled and egress rules are outside the exposure test. A GCP TCP allow entry with omitted ports covers all TCP ports. The checks assess rule configuration without calculating effective reachability across policies.
+- The network checks evaluate individual rules for internet-wide TCP exposure on ports 22 and 3389. They use the source and port fields present in the snapshot. Azure Deny and Outbound rules and GCP disabled and egress rules are outside the exposure test. The Azure check treats service tag names other than `Internet` as narrower sources without looking up their address ranges. A GCP TCP allow entry with omitted ports covers all TCP ports. The checks assess rule configuration without calculating effective reachability across policies.
 - RDS and Azure Storage use the inventory's public-access flags. GCS evaluates bucket-level IAM bindings and uniform access independently.
 - One FastAPI process commits RUNNING before returning HTTP 202, then executes the scan in the background. `ACCOUNT_WORKERS` limits account work across active scans and defaults to four. SQLite commits findings and COMPLETED together. Startup marks interrupted scans FAILED with a finish time and a reason. [Execution ADR](docs/adr/0001-in-process-scan-execution.md)
 - Nginx serves the dashboard and proxies same-origin `/api/` requests. The dashboard polls every second while the displayed scan is RUNNING and renders inventory strings as text.

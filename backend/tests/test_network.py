@@ -16,9 +16,10 @@ from app.checks import AWS_EC2_01, AZ_NSG_01, GCP_VPC_01
         ("tcp", "twenty-two", 22, "0.0.0.0/0", "CANNOT_SCAN", "port bounds"),
         ("tcp", 22, 21, "::/0", "CANNOT_SCAN", "port bounds"),
         ("tcp", 22, 22, "bad CIDR", "CANNOT_SCAN", "invalid CIDR"),
+        ("not a protocol", 22, 22, "0.0.0.0/0", "CANNOT_SCAN", "ingress[0].protocol"),
     ],
 )
-def test_ec2_admin_ingress(protocol, start, end, cidr, status, detail):
+def test_ec2_admin_ingress(protocol, start, end, cidr, status, detail, caplog):
     finding = AWS_EC2_01.evaluate({
         "group_id": "sg-1",
         "ingress": [{"protocol": protocol, "from_port": start, "to_port": end, "cidrs": [cidr]}],
@@ -29,6 +30,9 @@ def test_ec2_admin_ingress(protocol, start, end, cidr, status, detail):
     if status == "FAIL":
         assert cidr in finding["details"]
         assert "ingress[0]" in finding["details"]
+    if status == "CANNOT_SCAN":
+        assert any(record.levelname == "WARNING" and detail in record.message
+                   for record in caplog.records)
 
 
 @pytest.mark.parametrize(
@@ -42,13 +46,18 @@ def test_ec2_admin_ingress(protocol, start, end, cidr, status, detail):
         ({"destination_ports": "*"}, "FAIL", "22, 3389"),
         ({"destination_ports": "443"}, "PASS", "No internet-wide ingress"),
         ({"source": "10.0.0.0/8"}, "PASS", "No internet-wide ingress"),
+        ({"source": "10.0.0.1"}, "PASS", "No internet-wide ingress"),
+        ({"source": "Storage.WestUS"}, "PASS", "No internet-wide ingress"),
         ({"access": "Deny"}, "PASS", "No internet-wide ingress"),
         ({"direction": "Outbound"}, "PASS", "No internet-wide ingress"),
         ({"destination_ports": "22-abc"}, "CANNOT_SCAN", "destination_ports"),
         ({"access": None}, "CANNOT_SCAN", "access"),
+        ({"source": "999.999.999.999/0"}, "CANNOT_SCAN", "rules[0].source"),
+        ({"source": "999.999.999.999"}, "CANNOT_SCAN", "rules[0].source"),
+        ({"source": " "}, "CANNOT_SCAN", "rules[0].source"),
     ],
 )
-def test_nsg_admin_ingress(overrides, status, detail):
+def test_nsg_admin_ingress(overrides, status, detail, caplog):
     rule = {
         "name": "nsg-rule",
         "direction": "Inbound",
@@ -64,6 +73,9 @@ def test_nsg_admin_ingress(overrides, status, detail):
     if status == "FAIL":
         assert rule["source"] in finding["details"]
         assert rule["name"] in finding["details"]
+    if status == "CANNOT_SCAN":
+        assert any(record.levelname == "WARNING" and detail in record.message
+                   for record in caplog.records)
 
 
 @pytest.mark.parametrize(
@@ -81,10 +93,11 @@ def test_nsg_admin_ingress(overrides, status, detail):
          "PASS", "No internet-wide ingress"),
         ({"direction": "EGRESS", "source_ranges": None}, "PASS", "No internet-wide ingress"),
         ({"allowed": [{"IPProtocol": "tcp", "ports": [22]}]}, "CANNOT_SCAN", "allowed[0].ports"),
+        ({"allowed": [{"IPProtocol": "999"}]}, "CANNOT_SCAN", "allowed[0].IPProtocol"),
         ({"disabled": "false"}, "CANNOT_SCAN", "disabled"),
     ],
 )
-def test_vpc_admin_ingress(overrides, status, detail):
+def test_vpc_admin_ingress(overrides, status, detail, caplog):
     resource = {
         "name": "firewall-rule",
         "direction": "INGRESS",
@@ -99,3 +112,6 @@ def test_vpc_admin_ingress(overrides, status, detail):
     if status == "FAIL":
         assert resource["source_ranges"][0] in finding["details"]
         assert resource["name"] in finding["details"]
+    if status == "CANNOT_SCAN":
+        assert any(record.levelname == "WARNING" and detail in record.message
+                   for record in caplog.records)
